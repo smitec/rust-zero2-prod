@@ -1,5 +1,4 @@
 use crate::domain::SubscriberEmail;
-use config::builder;
 use reqwest::Client;
 use secrecy::{ExposeSecret, Secret};
 
@@ -44,8 +43,7 @@ impl EmailClient {
             text_body: text_content,
         };
 
-        let builder = self
-            .http_client
+        self.http_client
             .post(&url)
             .header(
                 "X-Postmark-Server-Token",
