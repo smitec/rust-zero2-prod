@@ -1,12 +1,15 @@
+use crate::domain::SubscriberEmail;
+use crate::email_client::EmailClient;
 use crate::routes::error_chain_fmt;
 use actix_web::http::StatusCode;
 use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web::ResponseError;
+use anyhow::Context;
 use sqlx::PgPool;
 
 struct ConfirmedSubscriber {
-    email: String,
+    email: SubscriberEmail,
 }
 
 #[derive(serde::Deserialize)]
@@ -42,19 +45,44 @@ impl ResponseError for PublishError {
 }
 
 pub async fn publish_newsletter(
-    _body: web::Json<BodyData>,
+    body: web::Json<BodyData>,
     pool: web::Data<PgPool>,
+    email_client: web::Data<EmailClient>,
 ) -> Result<HttpResponse, PublishError> {
-    let _subscribers = get_confirmed_subscribers(&pool).await?;
+    let subscribers = get_confirmed_subscribers(&pool).await?;
+
+    for subscriber in subscribers {
+        match subscriber {
+            Ok(subscriber) => {
+                email_client
+                    .send_email(
+                        &subscriber.email,
+                        &body.title,
+                        &body.content.html,
+                        &body.content.text,
+                    )
+                    .await
+                    .with_context(|| format!("Failed to send email to {}", subscriber.email))?;
+            }
+            Err(error) => {
+                tracing::warn!(error.cause_chain = ?error,
+                "Skipping unconfirmed subscriber due to bad email");
+            }
+        }
+    }
+
     Ok(HttpResponse::Ok().finish())
 }
 
 #[tracing::instrument(name = "Get confirmed subscribers", skip(pool))]
 async fn get_confirmed_subscribers(
     pool: &PgPool,
-) -> Result<Vec<ConfirmedSubscriber>, anyhow::Error> {
+) -> Result<Vec<Result<ConfirmedSubscriber, anyhow::Error>>, anyhow::Error> {
+    struct Row {
+        email: String,
+    }
     let rows = sqlx::query_as!(
-        ConfirmedSubscriber,
+        Row,
         r#"
         SELECT email
         FROM subscriptions
@@ -63,5 +91,14 @@ async fn get_confirmed_subscribers(
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows)
+
+    let confirmed_subscribers = rows
+        .into_iter()
+        .map(|r| match SubscriberEmail::parse(r.email) {
+            Ok(email) => Ok(ConfirmedSubscriber { email }),
+            Err(error) => Err(anyhow::anyhow!(error)),
+        })
+        .collect();
+
+    Ok(confirmed_subscribers)
 }
