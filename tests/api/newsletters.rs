@@ -80,6 +80,30 @@ async fn newsletter_returns_400_for_invalid_data() {
     }
 }
 
+#[tokio::test]
+async fn requests_without_auth_are_rejected() {
+    let app = spawn_app().await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{}/newsletters", &app.address))
+        .json(&serde_json::json!({
+            "title": "Newsletter title",
+            "content": {
+            "text": "Newsletter as plain text",
+            "html": "<p>Newsletter as HTML</p>"
+        }
+        }))
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(401, response.status().as_u16());
+    assert_eq!(
+        r#"Basic realm="publish""#,
+        response.headers()["WWW-Authenticate"]
+    );
+}
+
 // Helper Functions
 
 async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
