@@ -13,7 +13,6 @@ use base64::Engine;
 use reqwest::header;
 use secrecy::ExposeSecret;
 use secrecy::Secret;
-use serde::de::Expected;
 use sqlx::PgPool;
 
 struct ConfirmedSubscriber {
