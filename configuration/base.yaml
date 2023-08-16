@@ -1,6 +1,7 @@
+redis_uri: "redis://127.0.0.1:6379"
 application:
   port: 8000
-  hmac_secret: "somethingsupersecretthatiwouldnevercommittotherepo"
+  hmac_secret: "somethingsupersecretthatiwouldnevercommittotherepoandapparentlynowitneedstobelonger"
 database:
   host: "127.0.0.1"
   port: 5432
